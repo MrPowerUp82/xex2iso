@@ -19,3 +19,14 @@ test('a mensagem explica a causa e o que fazer', () => {
   assert.match(STALE_FILE_MESSAGE, /selecione/i);
   assert.match(STALE_FILE_MESSAGE, /OneDrive/);
 });
+
+test('reconhece também o InvalidStateError com a mesma mensagem (arquivo de destino alterado durante a gravação)', () => {
+  const message = 'An operation that depends on state cached in an interface object was made but the state had changed since it was read from disk.';
+  assert.equal(isStaleFileError(new DOMException(message, 'InvalidStateError')), true);
+  assert.equal(isStaleFileError(new Error(message)), true);
+  assert.equal(isStaleFileError(new DOMException('outro problema', 'InvalidStateError')), false);
+});
+
+test('a mensagem também cobre o arquivo de destino', () => {
+  assert.match(STALE_FILE_MESSAGE, /destino|ISO que está sendo gravada/i);
+});

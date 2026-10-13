@@ -1,9 +1,13 @@
-// O navegador lança NotReadableError quando um File escolhido é lido depois que o arquivo real
-// no disco mudou (tamanho/data), por exemplo por sincronização do OneDrive ou por ter sido sobrescrito.
-export const isStaleFileError = (error) => error?.name === 'NotReadableError';
+// O Chrome usa esta mensagem (NotReadableError ou InvalidStateError) quando um arquivo de que a operação
+// depende mudou no disco depois de ser lido/aberto: tanto um arquivo de origem selecionado quanto o
+// arquivo de destino (a ISO) durante a gravação. Reconhecemos pelo texto, para cobrir os dois nomes.
+const STALE_TEXT = /state had changed since it was read from disk/i;
+
+export const isStaleFileError = (error) =>
+  error?.name === 'NotReadableError' || STALE_TEXT.test(error?.message ?? '');
 
 export const STALE_FILE_MESSAGE =
-  'O arquivo mudou ou ficou indisponível depois de selecionado, e o navegador se recusa a lê-lo. ' +
-  'Isso costuma acontecer com arquivos em pasta sincronizada (OneDrive, Dropbox), ao sobrescrever a ISO aberta ' +
-  'ou quando outro programa ainda está gravando. Copie os arquivos para uma pasta local fora da sincronização, ' +
-  'selecione-os novamente e tente de novo.';
+  'O navegador detectou que um arquivo mudou durante a operação: um arquivo de origem alterado depois de ' +
+  'selecionado, ou o arquivo de destino (a ISO que está sendo gravada) alterado ou travado por outro programa, ' +
+  'como OneDrive, antivírus ou indexador. Salve a ISO em uma pasta fora do OneDrive (por exemplo C:\\ISO), ' +
+  'selecione os arquivos novamente e tente de novo.';

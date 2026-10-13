@@ -12,6 +12,7 @@ import { isStaleFileError, STALE_FILE_MESSAGE } from './errors.js';
 const $ = (id) => document.getElementById(id);
 // ?fallback força o caminho sem gravação direta (download comum).
 const g = new URLSearchParams(location.search).has('fallback') ? {} : globalThis;
+$('build').textContent = 'versão 2026-10-13.4'; // permite saber se o navegador carregou o código novo
 let failedPaths = new Map(); // Blob de origem -> caminho, da conversão em andamento
 
 // ---------- utilidades de interface ----------
@@ -70,16 +71,20 @@ function reportError(error) {
   } else if (error instanceof NotXisoError || error instanceof CorruptIsoError) {
     showMessages({ kind: 'error', lines: [error.message] });
   } else if (isStaleFileError(error)) {
-    // As seleções guardam objetos File obsoletos: descarta para o usuário escolher de novo.
-    created = null;
-    opened = null;
-    $('create-summary').hidden = true;
-    $('extract-summary').hidden = true;
+    // A seleção é mantida: o culpado pode ser o arquivo de destino, e não a origem.
+    console.error(error);
     const path = failedPaths.get(error.failedPart);
-    showMessages({ kind: 'error', lines: path ? [`Arquivo com problema: ${path}`, STALE_FILE_MESSAGE] : [STALE_FILE_MESSAGE] });
+    showMessages({
+      kind: 'error',
+      lines: [
+        ...(path ? [`Arquivo de origem em leitura quando falhou: ${path}`] : []),
+        STALE_FILE_MESSAGE,
+        `Detalhe técnico: ${error.name}: ${error.message}`,
+      ],
+    });
   } else {
     console.error(error);
-    showMessages({ kind: 'error', lines: [`Erro inesperado: ${error?.message ?? error}`] });
+    showMessages({ kind: 'error', lines: [`Erro inesperado (${error?.name ?? 'sem nome'}): ${error?.message ?? error}`] });
   }
 }
 
