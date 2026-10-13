@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>XEX ⇄ ISO</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>XEX ⇄ ISO</h1>
+      <p>Crie uma ISO de Xbox 360 a partir de uma pasta de jogo ou de um <code>.xex</code>, ou extraia os arquivos de uma ISO. Tudo roda no seu navegador: nenhum arquivo é enviado para a internet.</p>
+    </header>
+
+    <p id="browser-notice" class="message warn" hidden></p>
+
+    <div class="tabs" role="tablist">
+      <button id="tab-create" role="tab" aria-controls="panel-create" aria-selected="true">Criar ISO</button>
+      <button id="tab-extract" role="tab" aria-controls="panel-extract" aria-selected="false">Extrair ISO</button>
+    </div>
+
+    <section id="panel-create" role="tabpanel" aria-labelledby="tab-create">
+      <div id="drop-create" class="drop">
+        <p>Arraste aqui uma <strong>pasta</strong> de jogo ou um arquivo <code>.xex</code></p>
+        <div class="actions">
+          <label class="button">Escolher pasta<input id="pick-folder" type="file" webkitdirectory hidden></label>
+          <label class="button">Escolher arquivos<input id="pick-files" type="file" multiple hidden></label>
+        </div>
+      </div>
+      <div id="create-summary" hidden>
+        <p id="create-info"></p>
+        <label id="rename-row" hidden><input id="rename-default" type="checkbox" checked> Renomear para <code>default.xex</code></label>
+        <button id="convert" class="primary" type="button">Criar ISO</button>
+      </div>
+    </section>
+
+    <section id="panel-extract" role="tabpanel" aria-labelledby="tab-extract" hidden>
+      <div id="drop-extract" class="drop">
+        <p>Arraste aqui uma <strong>ISO</strong> do Xbox 360</p>
+        <div class="actions">
+          <label class="button">Escolher ISO<input id="pick-iso" type="file" accept=".iso" hidden></label>
+        </div>
+      </div>
+      <div id="extract-summary" hidden>
+        <p id="extract-info"></p>
+        <div class="actions">
+          <button id="extract-xex" type="button">Extrair default.xex</button>
+          <button id="extract-all" type="button">Extrair tudo…</button>
+        </div>
+        <table>
+          <thead><tr><th>Caminho</th><th class="num">Tamanho</th><th></th></tr></thead>
+          <tbody id="file-rows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <div id="progress-box" hidden>
+      <progress id="progress" max="1" value="0"></progress>
+      <span id="progress-label"></span>
+      <button id="cancel" type="button">Cancelar</button>
+    </div>
+
+    <div id="messages" aria-live="polite"></div>
+
+    <footer>
+      <p>Use apenas arquivos seus. A ISO gerada só roda em console desbloqueado ou em emulador; este site não remove nem recria assinaturas.</p>
+    </footer>
+  </main>
+  <script type="module" src="src/ui/app.js"></script>
+</body>
+</html>
