@@ -1,5 +1,5 @@
 import { buildXiso } from '../xdvdfs/writer.js';
-import { ValidationError, validateTree, collectWarnings } from '../xdvdfs/validate.js';
+import { ValidationError, validateTree, collectWarnings, findUnreadableFiles } from '../xdvdfs/validate.js';
 import { openIso, listEntries, readFile, findRootFile, NotXisoError, CorruptIsoError } from '../xdvdfs/reader.js';
 import { treeFromFileList, treeFromEntries, withDefaultXex } from '../io/sources.js';
 import {
@@ -12,6 +12,7 @@ import { isStaleFileError, STALE_FILE_MESSAGE } from './errors.js';
 const $ = (id) => document.getElementById(id);
 // ?fallback força o caminho sem gravação direta (download comum).
 const g = new URLSearchParams(location.search).has('fallback') ? {} : globalThis;
+let failedPaths = new Map(); // Blob de origem -> caminho, da conversão em andamento
 
 // ---------- utilidades de interface ----------
 function formatBytes(bytes) {
@@ -74,7 +75,8 @@ function reportError(error) {
     opened = null;
     $('create-summary').hidden = true;
     $('extract-summary').hidden = true;
-    showMessages({ kind: 'error', lines: [STALE_FILE_MESSAGE] });
+    const path = failedPaths.get(error.failedPart);
+    showMessages({ kind: 'error', lines: path ? [`Arquivo com problema: ${path}`, STALE_FILE_MESSAGE] : [STALE_FILE_MESSAGE] });
   } else {
     console.error(error);
     showMessages({ kind: 'error', lines: [`Erro inesperado: ${error?.message ?? error}`] });
@@ -137,18 +139,47 @@ const summarize = (root) => {
 
 const effectiveRoot = () => (created && $('rename-default').checked ? withDefaultXex(created.root) : created?.root);
 
+// Caminho de cada arquivo de origem, para dizer qual falhou durante a gravação.
+function pathsByBlob(root) {
+  const paths = new Map();
+  (function walk(dir, prefix) {
+    for (const node of dir.children) {
+      if (node.children) walk(node, `${prefix}${node.name}/`);
+      else paths.set(node.blob, prefix + node.name);
+    }
+  })(root, '');
+  return paths;
+}
+
 async function refreshCreate() {
-  if (!created) return;
+  const source = created;
+  if (!source) return;
   const root = effectiveRoot();
-  const { errors } = validateTree(root);
+  $('convert').disabled = true;
+  const errors = [...validateTree(root).errors];
+  if (errors.length === 0) {
+    if (!source.unreadable) {
+      // Uma vez por seleção: acha agora, pelo nome, os arquivos que o navegador já não consegue ler.
+      source.unreadable = await findUnreadableFiles(source.root, {
+        onProgress: (done, total) => {
+          if (done % 25 === 0 || done === total) {
+            showMessages({ kind: 'info', lines: [`Verificando arquivos… ${done}/${total}`] });
+          }
+        },
+      });
+      if (created !== source) return; // outra seleção chegou enquanto verificava
+    }
+    errors.push(...source.unreadable);
+  }
   const warnings = errors.length > 0 ? [] : await collectWarnings(root);
   const { files, bytes } = summarize(root);
   $('create-summary').hidden = false;
-  $('create-info').textContent = `${created.label}: ${files} arquivo(s), ${formatBytes(bytes)}.`;
-  $('rename-row').hidden = withDefaultXex(created.root) === created.root;
+  $('create-info').textContent = `${source.label}: ${files} arquivo(s), ${formatBytes(bytes)}.`;
+  $('rename-row').hidden = withDefaultXex(source.root) === source.root;
   $('convert').disabled = errors.length > 0;
   showMessages(
     { kind: 'error', lines: errors.map((e) => `${e.path}: ${e.message}`) },
+    { kind: 'error', lines: source.unreadable?.length > 0 ? [STALE_FILE_MESSAGE] : [] },
     { kind: 'warn', lines: warnings },
   );
 }
@@ -183,6 +214,7 @@ $('convert').addEventListener('click', () => runTask(async (signal, onProgress) 
   // O seletor de arquivo precisa ser aberto antes de qualquer espera longa (gesto do usuário).
   const sink = await openFileSink(`${created.label}.iso`, { g });
   const { parts, totalSize } = buildXiso(root);
+  failedPaths = pathsByBlob(root);
   await writeParts(sink, parts, { signal, onProgress: (done) => onProgress(done, totalSize) });
   showMessages({ kind: 'ok', lines: [`ISO criada (${formatBytes(totalSize)}).`] });
 }));

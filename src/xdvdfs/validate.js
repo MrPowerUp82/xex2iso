@@ -55,6 +55,33 @@ export function validateTree(root) {
   return { errors };
 }
 
+// Lê o primeiro e o último byte de cada arquivo para achar, antes de converter, os que o navegador
+// já não consegue ler (arquivo alterado depois de selecionado, bloqueado etc.).
+export async function findUnreadableFiles(root, { onProgress } = {}) {
+  const files = [];
+  (function walk(dir, prefix) {
+    for (const node of dir.children) {
+      if (isDirectory(node)) walk(node, `${prefix}${node.name}/`);
+      else files.push({ path: prefix + node.name, blob: node.blob });
+    }
+  })(root, '');
+
+  const problems = [];
+  let done = 0;
+  for (const { path, blob } of files) {
+    try {
+      if (blob.size > 0) {
+        await blob.slice(0, 1).arrayBuffer();
+        await blob.slice(blob.size - 1, blob.size).arrayBuffer();
+      }
+    } catch (error) {
+      problems.push({ path, message: `não pôde ser lido (${error?.name ?? 'erro'}: ${error?.message ?? ''})` });
+    }
+    onProgress?.(++done, files.length);
+  }
+  return problems;
+}
+
 export async function collectWarnings(root) {
   const warnings = [];
   const xex = root.children.find((n) => !isDirectory(n) && n.name.toUpperCase() === 'DEFAULT.XEX');

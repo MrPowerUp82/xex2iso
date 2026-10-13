@@ -51,8 +51,10 @@ export async function openFileSink(suggestedName, { g = globalThis, download = d
 
 export async function writeParts(sink, parts, { onProgress = () => {}, signal } = {}) {
   let done = 0;
+  let current = null;
   try {
     for (const part of parts) {
+      current = part;
       const isBytes = part instanceof Uint8Array;
       const size = isBytes ? part.byteLength : part.size;
       for (let at = 0; at < size; at += CHUNK_BYTES) {
@@ -66,6 +68,8 @@ export async function writeParts(sink, parts, { onProgress = () => {}, signal } 
     if (signal?.aborted) throw new CancelledError();
     await sink.close();
   } catch (error) {
+    // Permite à interface dizer qual arquivo falhou (o Blob da parte é o próprio File de origem).
+    if (error && typeof error === 'object') error.failedPart = current;
     await Promise.resolve(sink.abort()).catch(() => {});
     throw error;
   }

@@ -110,3 +110,13 @@ test('createDirectory e writeFileIntoDirectory criam subpastas e gravam o conteÃ
   await writeFileIntoDirectory(rootDir, 'raiz.bin', new Blob([]));
   assert.equal(rootDir.files.get('raiz.bin').closed, true);
 });
+
+test('writeParts: falha de leitura/escrita registra qual parte falhou (para apontar o arquivo)', async () => {
+  const good = new Blob([new Uint8Array(4)]);
+  const bad = new Blob([new Uint8Array(4)]);
+  const record = { chunks: [], closed: false, aborted: false };
+  let calls = 0;
+  const sink = { ...fakeWritable(record), write: async () => { if (++calls === 2) throw new DOMException('x', 'NotReadableError'); } };
+  await assert.rejects(writeParts(sink, [good, bad]), (error) => error.name === 'NotReadableError' && error.failedPart === bad);
+  assert.equal(record.aborted, true);
+});

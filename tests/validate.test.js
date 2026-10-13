@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateTree, collectWarnings, ValidationError } from '../src/xdvdfs/validate.js';
+import { validateTree, collectWarnings, findUnreadableFiles, ValidationError } from '../src/xdvdfs/validate.js';
 import { file, dir, root } from './helpers.js';
 
 test('árvore válida não tem erros', () => {
@@ -57,4 +57,24 @@ test('collectWarnings: sem default.xex, com magic errado e válido', async () =>
 test('ß.txt e SS.txt não são duplicados; A.txt e a.txt são', () => {
   assert.equal(validateTree(root(file('ß.txt', 'x'), file('SS.txt', 'x'))).errors.length, 0);
   assert.equal(validateTree(root(file('A.txt', 'x'), file('a.txt', 'x'))).errors.length, 1);
+});
+
+const unreadable = (name) => ({
+  name,
+  blob: { size: 10, slice: () => ({ arrayBuffer: () => Promise.reject(new DOMException('state had changed since it was read from disk', 'NotReadableError')) }) },
+});
+
+test('findUnreadableFiles aponta os arquivos que o navegador não consegue ler, com o caminho', async () => {
+  const progress = [];
+  const problems = await findUnreadableFiles(
+    root(file('ok.bin', 'x'), dir('Content', unreadable('quebrado.bin'), file('vazio', ''), dir('deep', unreadable('outro.dat')))),
+    { onProgress: (done, total) => progress.push([done, total]) },
+  );
+  assert.deepEqual(problems.map((p) => p.path), ['Content/quebrado.bin', 'Content/deep/outro.dat']);
+  assert.match(problems[0].message, /NotReadableError/);
+  assert.deepEqual(progress.at(-1), [4, 4]);
+});
+
+test('findUnreadableFiles: árvore legível não tem problemas', async () => {
+  assert.deepEqual(await findUnreadableFiles(root(file('a', 'x'), file('b', ''))), []);
 });
