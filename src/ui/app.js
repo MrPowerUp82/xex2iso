@@ -7,6 +7,7 @@ import {
   supportsFilePicker, supportsDirectoryPicker, CancelledError,
 } from '../io/sinks.js';
 import { createTaskRunner } from './tasks.js';
+import { isStaleFileError, STALE_FILE_MESSAGE } from './errors.js';
 
 const $ = (id) => document.getElementById(id);
 // ?fallback força o caminho sem gravação direta (download comum).
@@ -67,6 +68,13 @@ function reportError(error) {
     showMessages({ kind: 'error', lines: error.problems.map((p) => `${p.path}: ${p.message}`) });
   } else if (error instanceof NotXisoError || error instanceof CorruptIsoError) {
     showMessages({ kind: 'error', lines: [error.message] });
+  } else if (isStaleFileError(error)) {
+    // As seleções guardam objetos File obsoletos: descarta para o usuário escolher de novo.
+    created = null;
+    opened = null;
+    $('create-summary').hidden = true;
+    $('extract-summary').hidden = true;
+    showMessages({ kind: 'error', lines: [STALE_FILE_MESSAGE] });
   } else {
     console.error(error);
     showMessages({ kind: 'error', lines: [`Erro inesperado: ${error?.message ?? error}`] });
@@ -158,8 +166,14 @@ wireDrop($('drop-create'), async (entries, files) => {
     reportError(error);
   }
 });
-$('pick-folder').addEventListener('change', (event) => setCreateSource(treeFromFileList([...event.target.files])));
-$('pick-files').addEventListener('change', (event) => setCreateSource(treeFromFileList([...event.target.files])));
+// Copia a lista e zera o input: sem isso, escolher o mesmo arquivo de novo não dispara "change".
+function pickCreateSource(event) {
+  const files = [...event.target.files];
+  event.target.value = '';
+  if (files.length > 0) setCreateSource(treeFromFileList(files)).catch(reportError);
+}
+$('pick-folder').addEventListener('change', pickCreateSource);
+$('pick-files').addEventListener('change', pickCreateSource);
 $('rename-default').addEventListener('change', refreshCreate);
 
 $('convert').addEventListener('click', () => runTask(async (signal, onProgress) => {
@@ -230,7 +244,11 @@ function renderEntries() {
 }
 
 wireDrop($('drop-extract'), (_entries, files) => { if (files[0]) setIsoSource(files[0]); });
-$('pick-iso').addEventListener('change', (event) => { if (event.target.files[0]) setIsoSource(event.target.files[0]); });
+$('pick-iso').addEventListener('change', (event) => {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (file) setIsoSource(file);
+});
 
 $('extract-xex').addEventListener('click', () => {
   const entry = findRootFile(opened.entries, 'default.xex');
