@@ -37,3 +37,9 @@ test('describeFailure diz em qual etapa falhou', () => {
   assert.match(describeFailure({ failedStage: 'close' }), /finalizar.*destino/);
   assert.equal(describeFailure({}), null);
 });
+
+test('falha ao finalizar diz onde está a ISO completa (arquivo .crswap do Chrome)', () => {
+  const text = describeFailure({ failedStage: 'close', target: 'game.iso' });
+  assert.match(text, /game\.iso\.crswap/);
+  assert.match(text, /renomei/i);
+});

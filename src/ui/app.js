@@ -12,7 +12,8 @@ import { isStaleFileError, describeFailure, STALE_FILE_MESSAGE } from './errors.
 const $ = (id) => document.getElementById(id);
 // ?fallback força o caminho sem gravação direta (download comum).
 const g = new URLSearchParams(location.search).has('fallback') ? {} : globalThis;
-$('build').textContent = 'versão 2026-10-13.5'; // permite saber se o navegador carregou o código novo
+$('build').textContent = 'versão 2026-10-13.6'; // permite saber se o navegador carregou o código novo
+let lastTarget = null; // nome do arquivo de destino da gravação em andamento
 let failedPaths = new Map(); // Blob de origem -> caminho, da conversão em andamento
 
 // ---------- utilidades de interface ----------
@@ -77,6 +78,7 @@ function reportError(error) {
       failedStage: error.failedStage,
       path: failedPaths.get(error.failedPart),
       offset: error.failedOffset,
+      target: lastTarget,
     });
     showMessages({
       kind: 'error',
@@ -221,7 +223,8 @@ $('convert').addEventListener('click', () => runTask(async (signal, onProgress) 
   const { errors } = validateTree(root);
   if (errors.length > 0) throw new ValidationError(errors);
   // O seletor de arquivo precisa ser aberto antes de qualquer espera longa (gesto do usuário).
-  const sink = await openFileSink(`${created.label}.iso`, { g });
+  lastTarget = `${created.label}.iso`;
+  const sink = await openFileSink(lastTarget, { g });
   const { parts, totalSize } = buildXiso(root);
   failedPaths = pathsByBlob(root);
   await writeParts(sink, parts, { signal, onProgress: (done) => onProgress(done, totalSize) });
@@ -248,6 +251,7 @@ async function setIsoSource(file) {
 function saveEntry(entry) {
   const { iso } = opened; // a ISO aberta pode mudar durante a gravação; esta tarefa fica com a sua
   return runTask(async (signal, onProgress) => {
+    lastTarget = entry.name;
     const sink = await openFileSink(entry.name, { g });
     await writeParts(sink, [readFile(iso, entry)], { signal, onProgress: (done) => onProgress(done, entry.size) });
     showMessages({ kind: 'ok', lines: [`${entry.name} salvo.`] });

@@ -15,11 +15,15 @@ export const STALE_FILE_MESSAGE =
 const MIB = 1024 * 1024;
 
 // Diz em qual etapa a gravação falhou, a partir das anotações de writeParts. null se não houver dados.
-export function describeFailure({ failedStage, path, offset = 0 }) {
+export function describeFailure({ failedStage, path, offset = 0, target }) {
   const where = path ? ` do arquivo "${path}"` : '';
   const at = ` (por volta de ${(offset / MIB).toFixed(1)} MiB${path ? ' dentro dele' : ''})`;
   if (failedStage === 'read') return `Falhou ao ler a origem${where}${at}.`;
   if (failedStage === 'write') return `Falhou ao gravar no arquivo de destino${path ? ` ao copiar "${path}"` : ''}${at}.`;
-  if (failedStage === 'close') return 'Todos os dados foram enviados, mas falhou ao finalizar o arquivo de destino.';
+  if (failedStage === 'close') {
+    const swap = target ? `"${target}.crswap"` : 'um arquivo ".crswap"';
+    return 'Todos os dados foram enviados, mas o Chrome falhou ao finalizar o arquivo de destino. ' +
+      `A ISO completa provavelmente está em ${swap}, na pasta onde você mandou salvar: apague o "${target ?? 'nome'}" vazio e renomeie o .crswap para .iso.`;
+  }
   return null;
 }
