@@ -1,4 +1,4 @@
-import { MAX_ENTRY_OFFSET_DWORDS, MAX_FILE_SIZE, MAX_NAME_BYTES, latin1Bytes } from './format.js';
+import { MAX_ENTRY_OFFSET_DWORDS, MAX_FILE_SIZE, MAX_NAME_BYTES, latin1Bytes, nameKey } from './format.js';
 import { isDirectory, planDirectory } from './layout.js';
 
 export class ValidationError extends Error {
@@ -32,7 +32,7 @@ export function validateTree(root) {
         errors.push({ path, message: `Nome com mais de ${MAX_NAME_BYTES} bytes.` });
         namesOk = false;
       }
-      const key = node.name.toUpperCase();
+      const key = nameKey(node.name);
       if (seen.has(key)) {
         errors.push({ path, message: `Nome duplicado, sem diferenciar maiúsculas/minúsculas ("${seen.get(key)}").` });
         namesOk = false;

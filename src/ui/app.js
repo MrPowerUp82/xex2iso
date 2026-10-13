@@ -6,6 +6,7 @@ import {
   openFileSink, writeParts, writeFileIntoDirectory, createDirectory,
   supportsFilePicker, supportsDirectoryPicker, CancelledError,
 } from '../io/sinks.js';
+import { createTaskRunner } from './tasks.js';
 
 const $ = (id) => document.getElementById(id);
 // ?fallback força o caminho sem gravação direta (download comum).
@@ -40,21 +41,23 @@ function setProgress(done, total) {
   $('progress-label').textContent = `${formatBytes(done)} / ${formatBytes(total)}`;
 }
 
-let currentTask = null;
-
-async function runTask(job) {
-  const controller = new AbortController();
-  currentTask = controller;
-  $('progress-box').hidden = false;
-  setProgress(0, 1);
-  try {
-    await job(controller.signal, setProgress);
-  } catch (error) {
-    reportError(error);
-  } finally {
-    currentTask = null;
+const runner = createTaskRunner({
+  onStart: () => {
+    document.querySelector('main').dataset.busy = '';
+    $('progress-box').hidden = false;
+    setProgress(0, 1);
+  },
+  onFinish: () => {
+    delete document.querySelector('main').dataset.busy;
     $('progress-box').hidden = true;
-  }
+  },
+  onError: (error) => reportError(error),
+});
+
+// O job começa de forma síncrona dentro do clique, preservando o gesto exigido pelos seletores de arquivo.
+async function runTask(job) {
+  const started = await runner.run((signal) => job(signal, setProgress));
+  if (!started) showMessages({ kind: 'info', lines: ['Aguarde a operação atual terminar, ou cancele-a.'] });
 }
 
 function reportError(error) {
@@ -70,7 +73,7 @@ function reportError(error) {
   }
 }
 
-$('cancel').addEventListener('click', () => currentTask?.abort());
+$('cancel').addEventListener('click', () => runner.cancel());
 
 // ---------- abas ----------
 function selectTab(name) {
@@ -188,9 +191,10 @@ async function setIsoSource(file) {
 }
 
 function saveEntry(entry) {
+  const { iso } = opened; // a ISO aberta pode mudar durante a gravação; esta tarefa fica com a sua
   return runTask(async (signal, onProgress) => {
     const sink = await openFileSink(entry.name, { g });
-    await writeParts(sink, [readFile(opened.iso, entry)], { signal, onProgress: (done) => onProgress(done, entry.size) });
+    await writeParts(sink, [readFile(iso, entry)], { signal, onProgress: (done) => onProgress(done, entry.size) });
     showMessages({ kind: 'ok', lines: [`${entry.name} salvo.`] });
   });
 }
@@ -234,13 +238,14 @@ $('extract-xex').addEventListener('click', () => {
 });
 
 $('extract-all').addEventListener('click', () => runTask(async (signal, onProgress) => {
+  const { iso, entries } = opened; // captura local: uma ISO nova não pode vazar para esta extração
   const target = await g.showDirectoryPicker({ mode: 'readwrite' });
-  const files = opened.entries.filter((e) => !e.isDirectory);
+  const files = entries.filter((e) => !e.isDirectory);
   const total = files.reduce((sum, e) => sum + e.size, 0);
-  for (const entry of opened.entries.filter((e) => e.isDirectory)) await createDirectory(target, entry.path);
+  for (const entry of entries.filter((e) => e.isDirectory)) await createDirectory(target, entry.path);
   let base = 0;
   for (const entry of files) {
-    await writeFileIntoDirectory(target, entry.path, readFile(opened.iso, entry), {
+    await writeFileIntoDirectory(target, entry.path, readFile(iso, entry), {
       signal,
       onProgress: (done) => onProgress(base + done, total),
     });

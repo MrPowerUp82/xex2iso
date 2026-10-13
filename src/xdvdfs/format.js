@@ -30,9 +30,13 @@ export function latin1String(bytes) {
   return text;
 }
 
+// Só a-z sobem para maiúsculas; os demais bytes Latin-1 ficam crus. toUpperCase() do JS mapeia
+// ß→SS e µ→U+039C, o que gera duplicatas falsas e uma ordem que nenhuma ferramenta de disco usa.
+export const nameKey = (name) => name.replace(/[a-z]+/g, (letters) => letters.toUpperCase());
+
 export function compareNames(a, b) {
-  const x = a.toUpperCase();
-  const y = b.toUpperCase();
+  const x = nameKey(a);
+  const y = nameKey(b);
   return x < y ? -1 : x > y ? 1 : 0;
 }
 

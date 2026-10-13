@@ -38,3 +38,4 @@ th.num, td.num { text-align: right; white-space: nowrap; }
 .message.ok { background: var(--ok-bg); color: var(--ok); }
 .message.info { background: var(--card); border: 1px solid var(--line); }
 [hidden] { display: none !important; }
+main[data-busy] button:not(#cancel), main[data-busy] .button { pointer-events: none; opacity: .5; }

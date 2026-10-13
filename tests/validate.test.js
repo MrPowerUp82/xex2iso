@@ -53,3 +53,8 @@ test('collectWarnings: sem default.xex, com magic errado e válido', async () =>
   assert.equal((await collectWarnings(root(file('DEFAULT.XEX', 'XEX2xxxx')))).length, 0);
   assert.equal((await collectWarnings(root(file('default.xex', 'XEX1xxxx')))).length, 0);
 });
+
+test('ß.txt e SS.txt não são duplicados; A.txt e a.txt são', () => {
+  assert.equal(validateTree(root(file('ß.txt', 'x'), file('SS.txt', 'x'))).errors.length, 0);
+  assert.equal(validateTree(root(file('A.txt', 'x'), file('a.txt', 'x'))).errors.length, 1);
+});

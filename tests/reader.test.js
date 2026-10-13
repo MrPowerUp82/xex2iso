@@ -107,3 +107,17 @@ test('limite de entradas protege contra imagens absurdas', async () => {
   const iso = await openIso(isoOf(root(file('a', 'x'), file('b', 'x'), file('c', 'x'))));
   await assert.rejects(listEntries(iso, { maxEntries: 2 }), CorruptIsoError);
 });
+
+test('pasta vazia gravada como um setor 0xFF (forma de outras ferramentas) lista como vazia', async () => {
+  const rootDir = dirWith({ pos: 0, name: 'sub', sector: 34, size: 2048, attributes: 0x10 });
+  const blob = rawIso(rootDir, { extraRegions: [{ at: 34 * 2048, bytes: new Uint8Array(2048).fill(0xff) }], size: 35 * 2048 });
+  const iso = await openIso(blob);
+  assert.deepEqual((await listEntries(iso)).map((e) => [e.path, e.isDirectory]), [['sub', true]]);
+});
+
+test('raiz vazia (setor 0xFF) lista como vazia, mas 0xFF no meio da árvore continua sendo erro', async () => {
+  const emptyRoot = await openIso(rawIso(new Uint8Array(2048).fill(0xff)));
+  assert.deepEqual(await listEntries(emptyRoot), []);
+  const broken = dirWith({ pos: 0, name: 'a', right: 4 }); // aponta para o padding 0xFF em pos 16
+  await assert.rejects(listEntries(await openIso(rawIso(broken))), CorruptIsoError);
+});

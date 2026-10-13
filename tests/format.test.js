@@ -61,3 +61,9 @@ test('sectorToOffset usa aritmética que passa de 2^32', () => {
 test('dateToFiletime: época Unix', () => {
   assert.equal(dateToFiletime(new Date(0)), 116444736000000000n);
 });
+
+test('compareNames só põe a-z em maiúsculas: ß não vira SS e bytes >= 0x80 comparam crus', () => {
+  assert.notEqual(compareNames('ß.txt', 'SS.txt'), 0);
+  assert.ok(compareNames('àb', 'Éa') > 0, '0xE0 > 0xC9');
+  assert.equal(compareNames('a.TXT', 'A.txt'), 0);
+});

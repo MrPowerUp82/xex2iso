@@ -49,6 +49,8 @@ async function readDirectory(iso, sector, size, counter) {
   if (size > MAX_DIRECTORY_BYTES) throw new CorruptIsoError('Diretório grande demais.');
   assertInside(iso, sector, size, 'Diretório');
   const data = await readBytes(iso.blob, iso.partitionOffset + sectorToOffset(sector), size);
+  // Outras ferramentas gravam pasta vazia como um setor de 0xFF: a árvore já começa no padding.
+  if (data.length >= 4 && data[0] === 0xff && data[1] === 0xff && data[2] === 0xff && data[3] === 0xff) return [];
   const visited = new Set();
   const pending = [0];
   const entries = [];
