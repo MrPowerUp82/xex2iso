@@ -11,6 +11,7 @@ export const supportsFilePicker = (g = globalThis) => typeof g.showSaveFilePicke
 export const supportsDirectoryPicker = (g = globalThis) => typeof g.showDirectoryPicker === 'function';
 
 const writableSink = (writable) => ({
+  prefersBytes: true, // lê a origem em blocos para a memória: permite repetir leituras e separar erros de leitura/escrita
   write: (chunk) => writable.write(chunk),
   close: () => writable.close(),
   abort: () => writable.abort(),
@@ -49,9 +50,28 @@ export async function openFileSink(suggestedName, { g = globalThis, download = d
   };
 }
 
-export async function writeParts(sink, parts, { onProgress = () => {}, signal } = {}) {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Lê um bloco da origem para a memória, repetindo leituras que falham de forma transitória
+// (arquivo momentaneamente travado por antivírus/indexador).
+async function readChunk(part, at, end, { retries, retryDelayMs }) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return new Uint8Array(await part.slice(at, end).arrayBuffer());
+    } catch (error) {
+      if (attempt >= retries) throw error;
+      await sleep(retryDelayMs);
+    }
+  }
+}
+
+// Em caso de erro, anota em qual etapa falhou ('read' origem, 'write' destino, 'close' finalização),
+// qual parte (o Blob de origem) e em que posição, para a interface apontar o culpado.
+export async function writeParts(sink, parts, { onProgress = () => {}, signal, retries = 3, retryDelayMs = 250 } = {}) {
   let done = 0;
   let current = null;
+  let offset = 0;
+  let stage = 'write';
   try {
     for (const part of parts) {
       current = part;
@@ -59,17 +79,32 @@ export async function writeParts(sink, parts, { onProgress = () => {}, signal } 
       const size = isBytes ? part.byteLength : part.size;
       for (let at = 0; at < size; at += CHUNK_BYTES) {
         if (signal?.aborted) throw new CancelledError();
+        offset = at;
         const end = Math.min(at + CHUNK_BYTES, size);
-        await sink.write(isBytes ? part.subarray(at, end) : part.slice(at, end));
+        let chunk;
+        if (isBytes) {
+          chunk = part.subarray(at, end);
+        } else if (sink.prefersBytes) {
+          stage = 'read';
+          chunk = await readChunk(part, at, end, { retries, retryDelayMs });
+        } else {
+          chunk = part.slice(at, end); // sem gravação direta: mantém o Blob apoiado no arquivo, sem copiar
+        }
+        stage = 'write';
+        await sink.write(chunk);
         done += end - at;
         onProgress(done);
       }
     }
     if (signal?.aborted) throw new CancelledError();
+    stage = 'close';
     await sink.close();
   } catch (error) {
-    // Permite à interface dizer qual arquivo falhou (o Blob da parte é o próprio File de origem).
-    if (error && typeof error === 'object') error.failedPart = current;
+    if (error && typeof error === 'object') {
+      error.failedStage = stage;
+      error.failedPart = stage === 'close' ? null : current;
+      error.failedOffset = offset;
+    }
     await Promise.resolve(sink.abort()).catch(() => {});
     throw error;
   }

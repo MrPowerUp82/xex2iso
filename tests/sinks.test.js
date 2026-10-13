@@ -120,3 +120,53 @@ test('writeParts: falha de leitura/escrita registra qual parte falhou (para apon
   await assert.rejects(writeParts(sink, [good, bad]), (error) => error.name === 'NotReadableError' && error.failedPart === bad);
   assert.equal(record.aborted, true);
 });
+
+// Parte "Blob" falsa cujas leituras falham as primeiras `failures` vezes
+const flakyPart = (size, failures) => {
+  let calls = 0;
+  return {
+    size,
+    get calls() { return calls; },
+    slice: (a, b) => ({
+      arrayBuffer: async () => {
+        if (++calls <= failures) throw new DOMException('state had changed since it was read from disk', 'InvalidStateError');
+        return new Uint8Array(b - a).fill(7).buffer;
+      },
+    }),
+  };
+};
+const bytesSink = (record) => ({ ...fakeWritable(record), prefersBytes: true });
+
+test('writeParts: leitura da origem que falha de forma transitória é repetida e a gravação segue', async () => {
+  const record = { chunks: [], closed: false, aborted: false };
+  const part = flakyPart(6, 2);
+  await writeParts(bytesSink(record), [part], { retryDelayMs: 0 });
+  assert.equal(part.calls, 3);
+  assert.equal(record.closed, true);
+  assert.deepEqual([...record.chunks[0]], [7, 7, 7, 7, 7, 7]);
+});
+
+test('writeParts: leitura que continua falhando vira erro da etapa "read", com a parte e a posição', async () => {
+  const record = { chunks: [], closed: false, aborted: false };
+  const first = new Uint8Array(3);
+  const part = flakyPart(CHUNK_BYTES + 10, 99);
+  await assert.rejects(writeParts(bytesSink(record), [first, part], { retryDelayMs: 0 }), (error) =>
+    error.failedStage === 'read' && error.failedPart === part && error.failedOffset === 0);
+  assert.equal(part.calls, 3, 'três tentativas');
+  assert.equal(record.aborted, true);
+});
+
+test('writeParts: falha ao escrever no destino é da etapa "write"', async () => {
+  const record = { chunks: [], closed: false, aborted: false };
+  const sink = { ...bytesSink(record), write: async () => { throw new DOMException('x', 'InvalidStateError'); } };
+  const part = flakyPart(4, 0);
+  await assert.rejects(writeParts(sink, [part], { retryDelayMs: 0 }), (error) => error.failedStage === 'write' && error.failedPart === part);
+});
+
+test('writeParts: falha ao fechar o destino é da etapa "close" e não culpa nenhum arquivo de origem', async () => {
+  const record = { chunks: [], closed: false, aborted: false };
+  const sink = { ...bytesSink(record), close: async () => { throw new DOMException('x', 'InvalidStateError'); } };
+  const part = flakyPart(4, 0);
+  await assert.rejects(writeParts(sink, [part], { retryDelayMs: 0 }), (error) => error.failedStage === 'close' && error.failedPart === null);
+  assert.equal(record.aborted, true);
+});

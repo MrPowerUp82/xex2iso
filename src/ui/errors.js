@@ -11,3 +11,15 @@ export const STALE_FILE_MESSAGE =
   'selecionado, ou o arquivo de destino (a ISO que está sendo gravada) alterado ou travado por outro programa, ' +
   'como OneDrive, antivírus ou indexador. Salve a ISO em uma pasta fora do OneDrive (por exemplo C:\\ISO), ' +
   'selecione os arquivos novamente e tente de novo.';
+
+const MIB = 1024 * 1024;
+
+// Diz em qual etapa a gravação falhou, a partir das anotações de writeParts. null se não houver dados.
+export function describeFailure({ failedStage, path, offset = 0 }) {
+  const where = path ? ` do arquivo "${path}"` : '';
+  const at = ` (por volta de ${(offset / MIB).toFixed(1)} MiB${path ? ' dentro dele' : ''})`;
+  if (failedStage === 'read') return `Falhou ao ler a origem${where}${at}.`;
+  if (failedStage === 'write') return `Falhou ao gravar no arquivo de destino${path ? ` ao copiar "${path}"` : ''}${at}.`;
+  if (failedStage === 'close') return 'Todos os dados foram enviados, mas falhou ao finalizar o arquivo de destino.';
+  return null;
+}

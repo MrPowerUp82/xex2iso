@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isStaleFileError, STALE_FILE_MESSAGE } from '../src/ui/errors.js';
+import { isStaleFileError, describeFailure, STALE_FILE_MESSAGE } from '../src/ui/errors.js';
 
 test('reconhece o NotReadableError do navegador (arquivo mudou depois de selecionado)', () => {
   assert.equal(isStaleFileError(new DOMException('state had changed since it was read from disk', 'NotReadableError')), true);
@@ -29,4 +29,11 @@ test('reconhece também o InvalidStateError com a mesma mensagem (arquivo de des
 
 test('a mensagem também cobre o arquivo de destino', () => {
   assert.match(STALE_FILE_MESSAGE, /destino|ISO que está sendo gravada/i);
+});
+
+test('describeFailure diz em qual etapa falhou', () => {
+  assert.match(describeFailure({ failedStage: 'read', path: 'a/b.rpf', offset: 3 * 1024 * 1024 }), /ler.*a\/b\.rpf.*3\.0 MiB/s);
+  assert.match(describeFailure({ failedStage: 'write', path: 'a/b.rpf', offset: 0 }), /gravar.*destino/);
+  assert.match(describeFailure({ failedStage: 'close' }), /finalizar.*destino/);
+  assert.equal(describeFailure({}), null);
 });
